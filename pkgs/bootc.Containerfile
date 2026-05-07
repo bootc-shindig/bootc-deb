@@ -47,7 +47,7 @@ sed 's/.*"v\([^"]*\)".*/\1/' \
     "Priority: optional" \
     "Architecture: $(dpkg --print-architecture)" \
     "Maintainer: JumpyVi <jumpyvi@outlook.com>" \
-    "Depends: dracut, ostree" \
+    "Depends: dracut, ostree, libostree-dev" \
     "Description: bootc" \
     > /pkg/DEBIAN/control
 
