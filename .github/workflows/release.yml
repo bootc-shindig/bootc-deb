@@ -25,20 +25,18 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: Build .deb package and construct Repo
+      - name: Build .deb
         run: |
-          # 1. Build the package
           DOCKER_BUILDKIT=1 docker build -f pkgs/bootc.Containerfile --output type=local,dest=./docker-output .
           
-          # 2. Setup directory structure
           mkdir -p ./apt-repo/debian/dists/stable/main/binary-amd64
           mkdir -p ./apt-repo/debian/pool/main
           
           mv ./docker-output/*.deb ./apt-repo/debian/pool/main/
 
-          cd ./apt-repo
-          dpkg-scanpackages debian/pool/main /dev/null > debian/dists/stable/main/binary-amd64/Packages
-          gzip -9k debian/dists/stable/main/binary-amd64/Packages
+          cd ./apt-repo/debian
+          dpkg-scanpackages pool/main /dev/null > dists/stable/main/binary-amd64/Packages
+          gzip -9k -f dists/stable/main/binary-amd64/Packages
           
           apt-ftparchive \
             -o APT::FTPArchive::Release::Origin="jumpyvi" \
@@ -47,10 +45,10 @@ jobs:
             -o APT::FTPArchive::Release::Codename="stable" \
             -o APT::FTPArchive::Release::Architectures="amd64" \
             -o APT::FTPArchive::Release::Components="main" \
-            release debian/dists/stable > debian/dists/stable/Release
+            release dists/stable > dists/stable/Release
 
-          gpg --yes --clearsign --digest-algo SHA256 -o debian/dists/stable/InRelease debian/dists/stable/Release
-          gpg --yes -abs --digest-algo SHA256 -o debian/dists/stable/Release.gpg debian/dists/stable/Release
+          gpg --yes --clearsign --digest-algo SHA256 --local-user "${{ secrets.GPG_EMAIL }}" -o dists/stable/InRelease dists/stable/Release
+          gpg --yes -abs --digest-algo SHA256 --local-user "${{ secrets.GPG_EMAIL }}" -o dists/stable/Release.gpg dists/stable/Release
 
       - name: Deploy to GitHub Pages
         uses: jamesives/github-pages-deploy-action@v4
