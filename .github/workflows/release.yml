@@ -19,7 +19,7 @@ jobs:
 
       - name: Build .deb package and construct Repo
         run: |
-          docker build -t bootc-builder .
+          docker build -f pkgs/bootc.Containerfile -t bootc-builder .
           docker run --name builder bootc-builder
           
           docker cp builder:/out ./docker-output
