@@ -19,10 +19,7 @@ jobs:
 
       - name: Build .deb package and construct Repo
         run: |
-          docker build -f pkgs/bootc.Containerfile -t bootc-builder .
-          docker run --name builder bootc-builder
-          
-          docker cp builder:/out ./docker-output
+          DOCKER_BUILDKIT=1 docker build -f pkgs/bootc.Containerfile --output type=local,dest=./docker-output .
           
           mkdir -p ./apt-repo/debian/dists/stable/main/binary-amd64
           mkdir -p ./apt-repo/debian/pool/main
