@@ -1,0 +1,131 @@
+name: Build and Deploy Debian Package (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      containerfile:
+        description: "Containerfile path"
+        required: true
+        type: string
+      package_name:
+        description: "Name of the package"
+        required: true
+        type: string
+      origin:
+        description: "APT Release origin field"
+        required: true
+        type: string
+      label:
+        description: "APT Release label field"
+        required: true
+        type: string
+      suite:
+        description: "APT Release suite"
+        required: false
+        type: string
+        default: "stable"
+      codename:
+        description: "APT Release codename"
+        required: false
+        type: string
+        default: "stable"
+      architecture:
+        description: "Debian arch"
+        required: false
+        type: string
+        default: "amd64"
+      component:
+        description: "APT component"
+        required: false
+        type: string
+        default: "main"
+      deploy_on:
+        description: "Branch to deploy GitHub Pages to"
+        required: false
+        type: string
+        default: "gh-pages"
+    secrets:
+      GPG_PRIVATE_KEY:
+        description: "Your signing GPG Key"
+        required: true
+      GPG_PASSPHRASE:
+        description: "Your GPG passphrase"
+        required: true
+      GPG_EMAIL:
+        description: "Signee's email"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install APT Repository Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev apt-utils
+
+      - name: Import GPG Key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Build .deb
+        run: |
+          DOCKER_BUILDKIT=1 docker build \
+            -f ${{ inputs.containerfile }} \
+            --output type=local,dest=./docker-output \
+            .
+
+      - name: Assemble APT repository
+        run: |
+          SUITE="${{ inputs.suite }}"
+          COMPONENT="${{ inputs.component }}"
+          ARCH="${{ inputs.architecture }}"
+
+          POOL_DIR="./apt-repo/debian/pool/${COMPONENT}"
+          DIST_DIR="./apt-repo/debian/dists/${SUITE}/${COMPONENT}/binary-${ARCH}"
+
+          mkdir -p "${POOL_DIR}"
+          mkdir -p "${DIST_DIR}"
+
+          mv ./docker-output/*.deb "${POOL_DIR}/"
+
+          cd ./apt-repo/debian
+
+          dpkg-scanpackages "pool/${COMPONENT}" /dev/null \
+            > "dists/${SUITE}/${COMPONENT}/binary-${ARCH}/Packages"
+
+          gzip -9k -f "dists/${SUITE}/${COMPONENT}/binary-${ARCH}/Packages"
+
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="${{ inputs.origin }}" \
+            -o APT::FTPArchive::Release::Label="${{ inputs.label }}" \
+            -o APT::FTPArchive::Release::Suite="${SUITE}" \
+            -o APT::FTPArchive::Release::Codename="${{ inputs.codename }}" \
+            -o APT::FTPArchive::Release::Architectures="${ARCH}" \
+            -o APT::FTPArchive::Release::Components="${COMPONENT}" \
+            release "dists/${SUITE}" > "dists/${SUITE}/Release"
+
+          gpg --yes --clearsign \
+            --digest-algo SHA256 \
+            --local-user "${{ secrets.GPG_EMAIL }}" \
+            -o "dists/${SUITE}/InRelease" \
+            "dists/${SUITE}/Release"
+
+          gpg --yes -abs \
+            --digest-algo SHA256 \
+            --local-user "${{ secrets.GPG_EMAIL }}" \
+            -o "dists/${SUITE}/Release.gpg" \
+            "dists/${SUITE}/Release"
+
+      - name: Deploy to GitHub Pages
+        uses: jamesives/github-pages-deploy-action@v4
+        with:
+          branch: ${{ inputs.deploy_on }}
+          folder: apt-repo

@@ -1,0 +1,35 @@
+
+name: Release Bootc Debian Package
+ 
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+ 
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '15 9 */14 * *'
+ 
+jobs:
+  release-bootc:
+    uses: ./.github/workflows/reusable.yml
+    with:
+      containerfile: pkgs/bootc.Containerfile
+      package_name: bootc
+      origin: jumpyvi
+      label: Bootc-Deb
+      suite: stable
+      codename: stable
+      architecture: amd64
+      component: main
+      deploy_on: gh-pages
+    secrets:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GPG_EMAIL: ${{ secrets.GPG_EMAIL }}
